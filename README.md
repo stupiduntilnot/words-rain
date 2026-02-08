@@ -40,6 +40,9 @@ If you run with no flags, the app loads defaults from:
 
 If a required setting is still missing (for example wordbooks directory), startup fails with a clear error message.
 
+`WORDS_RAIN_OPEN_BROWSER=true` in config enables auto-opening the browser on startup.
+`WORDS_RAIN_ACCENT=en-US` sets the default TTS accent in the setup UI.
+
 ## Build
 
 ```bash
@@ -64,7 +67,7 @@ This will:
 - Build `words-rain`.
 - Copy it to `~/bin/words-rain`.
 - Create `~/.config/words-rain`.
-- Create default config at `~/.config/words-rain/config.env` if it does not exist.
+- Overwrite default config at `~/.config/words-rain/config.env`.
 
 ## Cross Compile
 

@@ -14,6 +14,7 @@ build:
 install: build
 	mkdir -p "$(HOME)/bin"
 	cp -f "$(BIN_NAME)" "$(HOME)/bin/$(BIN_NAME)"
+	chmod u+x "$(HOME)/bin/$(BIN_NAME)"
 	mkdir -p "$(CONFIG_DIR)"
 	mkdir -p "$(CONFIG_DIR)/wordbooks"
 	if ls wordbooks/*.txt >/dev/null 2>&1; then cp -f wordbooks/*.txt "$(CONFIG_DIR)/wordbooks/"; fi
@@ -21,6 +22,8 @@ install: build
 		'# words-rain default config' \
 		'WORDS_RAIN_HOST=127.0.0.1' \
 		'WORDS_RAIN_PORT=8080' \
+		'WORDS_RAIN_OPEN_BROWSER=true' \
+		'WORDS_RAIN_ACCENT=en-US' \
 		"WORDS_RAIN_WORDBOOKS_DIR=$(CONFIG_DIR)/wordbooks" \
 		> "$(CONFIG_FILE)"
 

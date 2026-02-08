@@ -3,6 +3,7 @@ const gamePanel = document.getElementById("game-panel");
 const wordbookSelect = document.getElementById("wordbook-select");
 const speedRange = document.getElementById("speed-range");
 const speedValue = document.getElementById("speed-value");
+const accentSelect = document.getElementById("accent-select");
 const startBtn = document.getElementById("start-btn");
 const setupError = document.getElementById("setup-error");
 const scoreEl = document.getElementById("score");
@@ -33,6 +34,7 @@ const state = {
   nextWordId: 1,
   lastFrameTime: 0,
   maxActiveWords: 8,
+  accent: "en-US",
 };
 
 const WORLD = {
@@ -80,6 +82,28 @@ async function fetchWordbookWords(name) {
   }
   const data = await res.json();
   return data.words || [];
+}
+
+async function fetchSettings() {
+  const res = await fetch("/api/settings");
+  if (!res.ok) {
+    throw new Error("Failed to load settings.");
+  }
+  return res.json();
+}
+
+async function saveAccent(accent) {
+  const res = await fetch("/api/settings/accent", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ accent }),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to save accent setting.");
+  }
+  return res.json();
 }
 
 function resetRuntimeState() {
@@ -199,6 +223,14 @@ function animateDissolve(word, durationMs) {
   });
 }
 
+function pickVoiceForLang(lang) {
+  if (!("speechSynthesis" in window)) {
+    return null;
+  }
+  const voices = window.speechSynthesis.getVoices() || [];
+  return voices.find((v) => v.lang === lang) || voices.find((v) => v.lang.startsWith(lang));
+}
+
 function speakWord(text) {
   return new Promise((resolve) => {
     if (!("speechSynthesis" in window)) {
@@ -211,7 +243,11 @@ function speakWord(text) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.92;
     utterance.pitch = 1.0;
-    utterance.lang = "en-US";
+    utterance.lang = state.accent;
+    const voice = pickVoiceForLang(state.accent);
+    if (voice) {
+      utterance.voice = voice;
+    }
 
     let settled = false;
     const done = () => {
@@ -439,6 +475,7 @@ async function startGame() {
 
   resetRuntimeState();
   state.speedLevel = Number(speedRange.value);
+  state.accent = accentSelect.value;
   state.pendingWords = shuffle(words.map((w) => String(w).toLowerCase().trim()).filter(Boolean));
 
   setupPanel.classList.add("hidden");
@@ -484,6 +521,15 @@ async function init() {
     wordbookSelect.appendChild(option);
   }
 
+  try {
+    const settings = await fetchSettings();
+    if (settings && (settings.accent === "en-US" || settings.accent === "en-GB")) {
+      accentSelect.value = settings.accent;
+    }
+  } catch (_err) {
+    // Keep default accent if settings are unavailable.
+  }
+
   startBtn.addEventListener("click", () => {
     void startGame();
   });
@@ -493,6 +539,12 @@ async function init() {
 
   speedRange.addEventListener("input", () => {
     speedValue.textContent = speedRange.value;
+  });
+
+  accentSelect.addEventListener("change", () => {
+    void saveAccent(accentSelect.value).catch(() => {
+      setupError.textContent = "Failed to save accent preference.";
+    });
   });
 
   document.addEventListener("keydown", (event) => {

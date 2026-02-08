@@ -8,13 +8,17 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 //go:embed web/*
@@ -23,6 +27,7 @@ var webFS embed.FS
 type server struct {
 	wordbooksDir string
 	staticFS     fs.FS
+	configPath   string
 }
 
 type wordbookListResponse struct {
@@ -34,14 +39,24 @@ type wordbookWordsResponse struct {
 	Words []string `json:"words"`
 }
 
+type settingsResponse struct {
+	Accent string `json:"accent"`
+}
+
+type settingsAccentRequest struct {
+	Accent string `json:"accent"`
+}
+
 func main() {
 	var wordbooksDir string
 	var host string
 	var port int
+	var openBrowser bool
 
 	flag.StringVar(&wordbooksDir, "wordbooks-dir", "", "Directory containing .txt wordbook files")
 	flag.StringVar(&host, "host", "127.0.0.1", "HTTP host")
 	flag.IntVar(&port, "port", 8080, "HTTP port")
+	flag.BoolVar(&openBrowser, "open-browser", false, "Open browser on startup")
 	flag.Parse()
 
 	if len(os.Args) == 1 {
@@ -58,6 +73,7 @@ func main() {
 		if port == 8080 && cfg.Port != 0 {
 			port = cfg.Port
 		}
+		openBrowser = cfg.OpenBrowser
 	}
 
 	if strings.TrimSpace(wordbooksDir) == "" {
@@ -73,18 +89,35 @@ func main() {
 		log.Fatalf("failed to load static files: %v", err)
 	}
 
+	configPath, err := defaultConfigPath()
+	if err != nil {
+		log.Fatalf("failed to resolve config path: %v", err)
+	}
+
 	s := &server{
 		wordbooksDir: wordbooksDir,
 		staticFS:     staticFS,
+		configPath:   configPath,
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/wordbooks", s.handleWordbooks)
 	mux.HandleFunc("/api/wordbooks/", s.handleWordbookWords)
+	mux.HandleFunc("/api/settings", s.handleSettings)
+	mux.HandleFunc("/api/settings/accent", s.handleSettingsAccent)
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	log.Printf("serving on http://%s", addr)
+	if openBrowser {
+		url := fmt.Sprintf("http://%s:%d", browserHost(host), port)
+		go func() {
+			time.Sleep(250 * time.Millisecond)
+			if err := openBrowserURL(url); err != nil {
+				log.Printf("failed to open browser: %v", err)
+			}
+		}()
+	}
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
@@ -147,6 +180,69 @@ func (s *server) handleWordbookWords(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, wordbookWordsResponse{Name: name, Words: words})
 }
 
+func (s *server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cfg, err := loadConfigOptional(s.configPath)
+	if err != nil {
+		http.Error(w, "failed to read settings", http.StatusInternalServerError)
+		return
+	}
+
+	accent := strings.TrimSpace(cfg.Accent)
+	if accent == "" {
+		accent = "en-US"
+	}
+	writeJSON(w, settingsResponse{Accent: accent})
+}
+
+func (s *server) handleSettingsAccent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req settingsAccentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	accent := strings.TrimSpace(req.Accent)
+	if accent != "en-US" && accent != "en-GB" {
+		http.Error(w, "invalid accent", http.StatusBadRequest)
+		return
+	}
+
+	cfg, err := loadConfigOptional(s.configPath)
+	if err != nil {
+		http.Error(w, "failed to read settings", http.StatusInternalServerError)
+		return
+	}
+	if cfg.Host == "" {
+		cfg.Host = "127.0.0.1"
+	}
+	if cfg.Port == 0 {
+		cfg.Port = 8080
+	}
+	if cfg.WordbooksDir == "" {
+		cfg.WordbooksDir = s.wordbooksDir
+	}
+	if cfg.Host == "127.0.0.1" && cfg.Port == 8080 && cfg.WordbooksDir == s.wordbooksDir && cfg.Accent == "" && !cfg.OpenBrowser {
+		cfg.OpenBrowser = true
+	}
+	cfg.Accent = accent
+
+	if err := writeConfig(s.configPath, cfg); err != nil {
+		http.Error(w, "failed to write settings", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, settingsResponse{Accent: cfg.Accent})
+}
+
 func listWordbooks(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -203,16 +299,36 @@ type appConfig struct {
 	Host         string
 	Port         int
 	WordbooksDir string
+	OpenBrowser  bool
+	Accent       string
+}
+
+func defaultConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve user home: %w", err)
+	}
+	return filepath.Join(home, ".config", "words-rain", "config.env"), nil
 }
 
 func loadDefaultConfig() (appConfig, string, error) {
-	home, err := os.UserHomeDir()
+	path, err := defaultConfigPath()
 	if err != nil {
-		return appConfig{}, "", fmt.Errorf("failed to resolve user home: %w", err)
+		return appConfig{}, "", err
 	}
-	path := filepath.Join(home, ".config", "words-rain", "config.env")
 	cfg, err := parseEnvConfig(path)
 	return cfg, path, err
+}
+
+func loadConfigOptional(path string) (appConfig, error) {
+	cfg, err := parseEnvConfig(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return appConfig{}, nil
+		}
+		return appConfig{}, err
+	}
+	return cfg, nil
 }
 
 func parseEnvConfig(path string) (appConfig, error) {
@@ -248,10 +364,59 @@ func parseEnvConfig(path string) (appConfig, error) {
 			cfg.Port = p
 		case "WORDS_RAIN_WORDBOOKS_DIR":
 			cfg.WordbooksDir = value
+		case "WORDS_RAIN_OPEN_BROWSER":
+			b, err := strconv.ParseBool(value)
+			if err != nil {
+				return appConfig{}, fmt.Errorf("invalid WORDS_RAIN_OPEN_BROWSER at line %d: %w", lineNo, err)
+			}
+			cfg.OpenBrowser = b
+		case "WORDS_RAIN_ACCENT":
+			cfg.Accent = value
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return appConfig{}, err
 	}
 	return cfg, nil
+}
+
+func writeConfig(path string, cfg appConfig) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	content := strings.Join([]string{
+		"# words-rain default config",
+		fmt.Sprintf("WORDS_RAIN_HOST=%s", cfg.Host),
+		fmt.Sprintf("WORDS_RAIN_PORT=%d", cfg.Port),
+		fmt.Sprintf("WORDS_RAIN_OPEN_BROWSER=%t", cfg.OpenBrowser),
+		fmt.Sprintf("WORDS_RAIN_WORDBOOKS_DIR=%s", cfg.WordbooksDir),
+		fmt.Sprintf("WORDS_RAIN_ACCENT=%s", cfg.Accent),
+		"",
+	}, "\n")
+	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+func browserHost(host string) string {
+	h := strings.TrimSpace(host)
+	if h == "" || h == "0.0.0.0" || h == "::" {
+		return "127.0.0.1"
+	}
+	if ip := net.ParseIP(h); ip != nil && ip.IsUnspecified() {
+		return "127.0.0.1"
+	}
+	return h
+}
+
+func openBrowserURL(target string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", target)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", target)
+	default:
+		cmd = exec.Command("xdg-open", target)
+	}
+	return cmd.Start()
 }
