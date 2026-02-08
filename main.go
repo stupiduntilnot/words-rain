@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -42,12 +44,28 @@ func main() {
 	flag.IntVar(&port, "port", 8080, "HTTP port")
 	flag.Parse()
 
+	if len(os.Args) == 1 {
+		cfg, cfgPath, err := loadDefaultConfig()
+		if err != nil {
+			log.Fatalf("failed to load default config %q: %v", cfgPath, err)
+		}
+		if wordbooksDir == "" {
+			wordbooksDir = cfg.WordbooksDir
+		}
+		if host == "127.0.0.1" && cfg.Host != "" {
+			host = cfg.Host
+		}
+		if port == 8080 && cfg.Port != 0 {
+			port = cfg.Port
+		}
+	}
+
 	if strings.TrimSpace(wordbooksDir) == "" {
-		log.Fatal("--wordbooks-dir is required")
+		log.Fatal("missing required parameter: --wordbooks-dir (or WORDS_RAIN_WORDBOOKS_DIR in default config)")
 	}
 
 	if err := ensureDirExists(wordbooksDir); err != nil {
-		log.Fatalf("invalid --wordbooks-dir: %v", err)
+		log.Fatalf("invalid wordbooks directory: %v", err)
 	}
 
 	staticFS, err := fs.Sub(webFS, "web")
@@ -179,4 +197,61 @@ func writeJSON(w http.ResponseWriter, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		http.Error(w, "failed to encode json", http.StatusInternalServerError)
 	}
+}
+
+type appConfig struct {
+	Host         string
+	Port         int
+	WordbooksDir string
+}
+
+func loadDefaultConfig() (appConfig, string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return appConfig{}, "", fmt.Errorf("failed to resolve user home: %w", err)
+	}
+	path := filepath.Join(home, ".config", "words-rain", "config.env")
+	cfg, err := parseEnvConfig(path)
+	return cfg, path, err
+}
+
+func parseEnvConfig(path string) (appConfig, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return appConfig{}, err
+	}
+	defer file.Close()
+
+	cfg := appConfig{}
+	scanner := bufio.NewScanner(file)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			return appConfig{}, fmt.Errorf("invalid line %d: expected KEY=VALUE", lineNo)
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		switch key {
+		case "WORDS_RAIN_HOST":
+			cfg.Host = value
+		case "WORDS_RAIN_PORT":
+			p, err := strconv.Atoi(value)
+			if err != nil {
+				return appConfig{}, fmt.Errorf("invalid WORDS_RAIN_PORT at line %d: %w", lineNo, err)
+			}
+			cfg.Port = p
+		case "WORDS_RAIN_WORDBOOKS_DIR":
+			cfg.WordbooksDir = value
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return appConfig{}, err
+	}
+	return cfg, nil
 }

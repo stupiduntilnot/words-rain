@@ -30,12 +30,41 @@ go run . --wordbooks-dir ./wordbooks --port 8080
 
 Open `http://127.0.0.1:8080`.
 
+If you run with no flags, the app loads defaults from:
+
+`~/.config/words-rain/config.env`
+
+```bash
+./words-rain
+```
+
+If a required setting is still missing (for example wordbooks directory), startup fails with a clear error message.
+
 ## Build
 
 ```bash
 go build -o typing-rain .
 ./typing-rain --wordbooks-dir ./wordbooks --port 8080
 ```
+
+Or use `make`:
+
+```bash
+make build
+```
+
+## Install
+
+```bash
+make install
+```
+
+This will:
+
+- Build `words-rain`.
+- Copy it to `~/bin/words-rain`.
+- Create `~/.config/words-rain`.
+- Create default config at `~/.config/words-rain/config.env` if it does not exist.
 
 ## Cross Compile
 
