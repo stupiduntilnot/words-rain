@@ -50,7 +50,11 @@ function shuffle(list) {
 }
 
 function speedToFallSeconds(level) {
-  return 11 - level;
+  const minSeconds = 3;
+  const maxSeconds = 10;
+  const t = (level - 1) / 9;
+  const curved = Math.pow(t, 1.6);
+  return maxSeconds - (maxSeconds - minSeconds) * curved;
 }
 
 function speedToPixelsPerSecond(level) {
@@ -376,8 +380,11 @@ function drawEffects(now) {
 function render(now) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = "rgba(7, 38, 70, 0.12)";
-  ctx.fillRect(0, WORLD.groundY + 28, canvas.width, 6);
+  const inputZoneTop = canvas.height - 44;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
+  ctx.fillRect(0, inputZoneTop, canvas.width, canvas.height - inputZoneTop);
+  ctx.fillStyle = "rgba(7, 38, 70, 0.24)";
+  ctx.fillRect(0, inputZoneTop, canvas.width, 2);
 
   for (const word of state.activeWords) {
     drawWord(word);
@@ -387,7 +394,7 @@ function render(now) {
 
   ctx.fillStyle = "rgba(19, 42, 59, 0.8)";
   ctx.font = "16px Verdana";
-  ctx.fillText(`Input: ${state.inputBuffer}`, 14, canvas.height - 10);
+  ctx.fillText(`Input: ${state.inputBuffer}`, 14, canvas.height - 26);
 }
 
 function loop(now) {

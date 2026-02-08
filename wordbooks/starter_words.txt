@@ -1,0 +1,10 @@
+hello
+jane
+cat
+dog
+sun
+book
+red
+blue
+fish
+apple
