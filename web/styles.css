@@ -70,9 +70,17 @@ button:hover {
 
 .hud {
   display: flex;
+  align-items: center;
   gap: 16px;
   margin-bottom: 10px;
   font-weight: bold;
+}
+
+#back-btn {
+  margin: 0 0 0 auto;
+  width: auto;
+  min-width: 92px;
+  padding: 8px 14px;
 }
 
 #game-canvas {

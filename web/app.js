@@ -8,6 +8,7 @@ const setupError = document.getElementById("setup-error");
 const scoreEl = document.getElementById("score");
 const comboEl = document.getElementById("combo");
 const statusEl = document.getElementById("status");
+const backBtn = document.getElementById("back-btn");
 const resultBox = document.getElementById("result-box");
 const finalScoreEl = document.getElementById("final-score");
 const restartBtn = document.getElementById("restart-btn");
@@ -488,6 +489,7 @@ async function init() {
   });
 
   restartBtn.addEventListener("click", goToSetup);
+  backBtn.addEventListener("click", goToSetup);
 
   speedRange.addEventListener("input", () => {
     speedValue.textContent = speedRange.value;
