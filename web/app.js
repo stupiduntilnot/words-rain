@@ -211,6 +211,7 @@ function removeActiveWordById(id) {
 function animateDissolve(word, durationMs) {
   const startedAt = performance.now();
   state.effects.push({
+    kind: "dissolve",
     text: word.text,
     x: word.x,
     y: word.y,
@@ -220,6 +221,18 @@ function animateDissolve(word, durationMs) {
 
   return new Promise((resolve) => {
     setTimeout(resolve, durationMs);
+  });
+}
+
+function animateScoreGain(word, points, durationMs) {
+  const startedAt = performance.now();
+  state.effects.push({
+    kind: "score",
+    text: `+${points}`,
+    x: word.x + word.width + 12,
+    y: word.y - 4,
+    durationMs,
+    startedAt,
   });
 }
 
@@ -270,8 +283,10 @@ function speakWord(text) {
 
 async function onWordSolved(word) {
   state.combo += 1;
-  state.score += state.combo;
+  const points = state.combo;
+  state.score += points;
   updateHUD();
+  animateScoreGain(word, points, 850);
 
   state.frozen = true;
   statusEl.textContent = "Speaking";
@@ -303,12 +318,22 @@ function handleTypedCharacter(ch) {
   }
 
   const lower = ch.toLowerCase();
+  const hadInput = state.inputBuffer.length > 0;
   let nextBuffer = state.inputBuffer + lower;
   let target = chooseTarget(nextBuffer);
+  let brokenChain = false;
 
   if (!target) {
+    if (hadInput) {
+      brokenChain = true;
+    }
     nextBuffer = lower;
     target = chooseTarget(nextBuffer);
+  }
+
+  if (brokenChain) {
+    state.combo = 0;
+    updateHUD();
   }
 
   if (!target) {
@@ -403,13 +428,20 @@ function drawEffects(now) {
     const elapsed = now - effect.startedAt;
     const t = Math.min(1, elapsed / effect.durationMs);
     const alpha = 1 - t;
-    const drift = t * 26;
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = "#2a9d8f";
-    ctx.font = "bold 30px Trebuchet MS";
-    ctx.fillText(effect.text, effect.x, effect.y - drift);
+    if (effect.kind === "score") {
+      const drift = t * 22;
+      ctx.fillStyle = "#d95d39";
+      ctx.font = "bold 24px Trebuchet MS";
+      ctx.fillText(effect.text, effect.x, effect.y - drift);
+    } else {
+      const drift = t * 26;
+      ctx.fillStyle = "#2a9d8f";
+      ctx.font = "bold 30px Trebuchet MS";
+      ctx.fillText(effect.text, effect.x, effect.y - drift);
+    }
     ctx.restore();
   }
 }
