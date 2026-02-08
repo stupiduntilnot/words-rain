@@ -24,6 +24,7 @@ install: build
 		'WORDS_RAIN_PORT=8080' \
 		'WORDS_RAIN_OPEN_BROWSER=true' \
 		'WORDS_RAIN_ACCENT=en-US' \
+		'WORDS_RAIN_WORDBOOK=letters' \
 		"WORDS_RAIN_WORDBOOKS_DIR=$(CONFIG_DIR)/wordbooks" \
 		> "$(CONFIG_FILE)"
 

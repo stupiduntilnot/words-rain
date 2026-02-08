@@ -40,11 +40,16 @@ type wordbookWordsResponse struct {
 }
 
 type settingsResponse struct {
-	Accent string `json:"accent"`
+	Accent   string `json:"accent"`
+	Wordbook string `json:"wordbook"`
 }
 
 type settingsAccentRequest struct {
 	Accent string `json:"accent"`
+}
+
+type settingsWordbookRequest struct {
+	Wordbook string `json:"wordbook"`
 }
 
 func main() {
@@ -105,6 +110,7 @@ func main() {
 	mux.HandleFunc("/api/wordbooks/", s.handleWordbookWords)
 	mux.HandleFunc("/api/settings", s.handleSettings)
 	mux.HandleFunc("/api/settings/accent", s.handleSettingsAccent)
+	mux.HandleFunc("/api/settings/wordbook", s.handleSettingsWordbook)
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 
 	addr := fmt.Sprintf("%s:%d", host, port)
@@ -196,7 +202,10 @@ func (s *server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if accent == "" {
 		accent = "en-US"
 	}
-	writeJSON(w, settingsResponse{Accent: accent})
+	writeJSON(w, settingsResponse{
+		Accent:   accent,
+		Wordbook: strings.TrimSpace(cfg.Wordbook),
+	})
 }
 
 func (s *server) handleSettingsAccent(w http.ResponseWriter, r *http.Request) {
@@ -240,7 +249,60 @@ func (s *server) handleSettingsAccent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, settingsResponse{Accent: cfg.Accent})
+	writeJSON(w, settingsResponse{
+		Accent:   cfg.Accent,
+		Wordbook: cfg.Wordbook,
+	})
+}
+
+func (s *server) handleSettingsWordbook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req settingsWordbookRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	wordbook := strings.TrimSpace(req.Wordbook)
+	if wordbook == "" || strings.Contains(wordbook, "/") || strings.Contains(wordbook, "\\") {
+		http.Error(w, "invalid wordbook", http.StatusBadRequest)
+		return
+	}
+
+	cfg, err := loadConfigOptional(s.configPath)
+	if err != nil {
+		http.Error(w, "failed to read settings", http.StatusInternalServerError)
+		return
+	}
+	if cfg.Host == "" {
+		cfg.Host = "127.0.0.1"
+	}
+	if cfg.Port == 0 {
+		cfg.Port = 8080
+	}
+	if cfg.WordbooksDir == "" {
+		cfg.WordbooksDir = s.wordbooksDir
+	}
+	if cfg.Host == "127.0.0.1" && cfg.Port == 8080 && cfg.WordbooksDir == s.wordbooksDir && cfg.Accent == "" && cfg.Wordbook == "" && !cfg.OpenBrowser {
+		cfg.OpenBrowser = true
+	}
+	if cfg.Accent == "" {
+		cfg.Accent = "en-US"
+	}
+	cfg.Wordbook = wordbook
+
+	if err := writeConfig(s.configPath, cfg); err != nil {
+		http.Error(w, "failed to write settings", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, settingsResponse{
+		Accent:   cfg.Accent,
+		Wordbook: cfg.Wordbook,
+	})
 }
 
 func listWordbooks(dir string) ([]string, error) {
@@ -301,6 +363,7 @@ type appConfig struct {
 	WordbooksDir string
 	OpenBrowser  bool
 	Accent       string
+	Wordbook     string
 }
 
 func defaultConfigPath() (string, error) {
@@ -372,6 +435,8 @@ func parseEnvConfig(path string) (appConfig, error) {
 			cfg.OpenBrowser = b
 		case "WORDS_RAIN_ACCENT":
 			cfg.Accent = value
+		case "WORDS_RAIN_WORDBOOK":
+			cfg.Wordbook = value
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -392,6 +457,7 @@ func writeConfig(path string, cfg appConfig) error {
 		fmt.Sprintf("WORDS_RAIN_OPEN_BROWSER=%t", cfg.OpenBrowser),
 		fmt.Sprintf("WORDS_RAIN_WORDBOOKS_DIR=%s", cfg.WordbooksDir),
 		fmt.Sprintf("WORDS_RAIN_ACCENT=%s", cfg.Accent),
+		fmt.Sprintf("WORDS_RAIN_WORDBOOK=%s", cfg.Wordbook),
 		"",
 	}, "\n")
 	return os.WriteFile(path, []byte(content), 0o644)

@@ -106,6 +106,20 @@ async function saveAccent(accent) {
   return res.json();
 }
 
+async function saveWordbook(wordbook) {
+  const res = await fetch("/api/settings/wordbook", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ wordbook }),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to save wordbook setting.");
+  }
+  return res.json();
+}
+
 function resetRuntimeState() {
   state.running = true;
   state.frozen = false;
@@ -558,6 +572,15 @@ async function init() {
     if (settings && (settings.accent === "en-US" || settings.accent === "en-GB")) {
       accentSelect.value = settings.accent;
     }
+    if (settings && typeof settings.wordbook === "string" && settings.wordbook.trim() !== "") {
+      const saved = settings.wordbook.trim();
+      if (books.includes(saved)) {
+        wordbookSelect.value = saved;
+      } else {
+        wordbookSelect.value = books[0];
+        void saveWordbook(books[0]).catch(() => {});
+      }
+    }
   } catch (_err) {
     // Keep default accent if settings are unavailable.
   }
@@ -576,6 +599,12 @@ async function init() {
   accentSelect.addEventListener("change", () => {
     void saveAccent(accentSelect.value).catch(() => {
       setupError.textContent = "Failed to save accent preference.";
+    });
+  });
+
+  wordbookSelect.addEventListener("change", () => {
+    void saveWordbook(wordbookSelect.value).catch(() => {
+      setupError.textContent = "Failed to save wordbook preference.";
     });
   });
 
