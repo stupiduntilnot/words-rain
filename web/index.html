@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Typing Rain</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel" id="setup-panel">
+        <h1>Typing Rain</h1>
+        <p>Type falling words before they reach the ground.</p>
+
+        <label for="wordbook-select">Wordbook</label>
+        <select id="wordbook-select"></select>
+
+        <label for="speed-range">Fall speed: <span id="speed-value">1</span></label>
+        <input id="speed-range" type="range" min="1" max="10" value="1" />
+
+        <button id="start-btn">Start</button>
+        <p class="hint">Speed 1 = 10s from top to bottom, speed 10 = 1s.</p>
+        <p class="error" id="setup-error"></p>
+      </section>
+
+      <section class="panel game hidden" id="game-panel">
+        <div class="hud">
+          <div>Score: <span id="score">0</span></div>
+          <div>Combo: <span id="combo">0</span></div>
+          <div>Status: <span id="status">Running</span></div>
+        </div>
+
+        <canvas id="game-canvas" width="960" height="540"></canvas>
+
+        <div class="result hidden" id="result-box">
+          <h2>Game Complete</h2>
+          <p>Final score: <span id="final-score">0</span></p>
+          <button id="restart-btn">Back to Setup</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
