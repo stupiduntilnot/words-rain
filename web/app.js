@@ -4,6 +4,7 @@ const wordbookSelect = document.getElementById("wordbook-select");
 const speedRange = document.getElementById("speed-range");
 const speedValue = document.getElementById("speed-value");
 const accentSelect = document.getElementById("accent-select");
+const maxWordsInput = document.getElementById("max-words-input");
 const startBtn = document.getElementById("start-btn");
 const setupError = document.getElementById("setup-error");
 const scoreEl = document.getElementById("score");
@@ -138,6 +139,18 @@ function resetRuntimeState() {
   updateHUD();
   statusEl.textContent = "Running";
   resultBox.classList.add("hidden");
+}
+
+function parseMaxWordsLimit(rawValue) {
+  const text = String(rawValue || "").trim();
+  if (text === "") {
+    return 0;
+  }
+  const n = Number(text);
+  if (!Number.isFinite(n)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(n));
 }
 
 function updateHUD() {
@@ -522,7 +535,11 @@ async function startGame() {
   resetRuntimeState();
   state.speedLevel = Number(speedRange.value);
   state.accent = accentSelect.value;
-  state.pendingWords = shuffle(words.map((w) => String(w).toLowerCase().trim()).filter(Boolean));
+  const normalizedWords = words.map((w) => String(w).toLowerCase().trim()).filter(Boolean);
+  const maxWords = parseMaxWordsLimit(maxWordsInput.value);
+  const selectedWords =
+    maxWords > 0 ? shuffle(normalizedWords).slice(0, Math.min(maxWords, normalizedWords.length)) : normalizedWords;
+  state.pendingWords = shuffle(selectedWords);
 
   setupPanel.classList.add("hidden");
   gamePanel.classList.remove("hidden");

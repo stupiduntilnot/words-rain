@@ -24,6 +24,15 @@
           <option value="en-GB">British English (en-GB)</option>
         </select>
 
+        <label for="max-words-input">Max words (optional)</label>
+        <input
+          id="max-words-input"
+          type="number"
+          min="0"
+          step="1"
+          placeholder="0 means no limit"
+        />
+
         <button id="start-btn">Start</button>
         <p class="hint">Speed 1 = 10s from top to bottom, speed 10 = about 3s.</p>
         <p class="error" id="setup-error"></p>
